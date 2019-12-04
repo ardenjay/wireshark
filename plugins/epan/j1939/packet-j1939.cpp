@@ -70,50 +70,12 @@ static gint ett_j1939_can = -1;
 static gint ett_j1939_dtc = -1;
 static gint ett_j1939_message = -1;
 
-static gint ett_bam_fragment = -1;
-static gint ett_bam_fragments = -1;
-static gint hf_bam_fragments = -1;
-static gint hf_bam_fragment = -1;
-static gint hf_bam_fragment_overlap = -1;
-static gint hf_bam_fragment_overlap_conflict = -1;
-static gint hf_bam_fragment_multiple_tails = -1;
-static gint hf_bam_fragment_too_long_fragment = -1;
-static gint hf_bam_fragment_error = -1;
-static gint hf_bam_fragment_count = -1;
-static gint hf_bam_reassembled_in = -1;
-static gint hf_bam_reassembled_length = -1;
-static gint hf_bam_reassembled_data = -1;
-
 static dissector_handle_t j1939_handle;
-
-static reassembly_table bam_reassembly_table;
 
 static int j1939_address_type = -1;
 
-static const fragment_items bam_frag_items = {
-	&ett_bam_fragment,
-	&ett_bam_fragments,
-	&hf_bam_fragments,
-	&hf_bam_fragment,
-	&hf_bam_fragment_overlap,
-	&hf_bam_fragment_overlap_conflict,
-	&hf_bam_fragment_multiple_tails,
-	&hf_bam_fragment_too_long_fragment,
-	&hf_bam_fragment_error,
-	&hf_bam_fragment_count,
-	&hf_bam_reassembled_in,
-	&hf_bam_reassembled_length,
-	&hf_bam_reassembled_data,
-	"BAM fragments"};
-
-static const value_string tts_status[] = {
-	{0, "Off"}, {1, "Red"}, {2, "Yellow"}, {3, "Info"}, {7, "Not available"}};
-
-BamReassembler bamReassembler;
-
 /* SPN number, header_field_info.id */
 std::map<u32, int> hf_spn_id;
-std::map<u32 /*TTS number*/, int /*header_field_info.id*/> ttsNumToHinfoId;
 
 static int J1939_addr_to_str(const address* addr, gchar *buf, int buf_len)
 {
@@ -188,78 +150,34 @@ void proto_register_j1939(void)
             {"Data", "j1939.data",
             FT_BYTES, BASE_NONE|BASE_ALLOW_ZERO, NULL, 0x0, NULL, HFILL }
         },
-		{&hf_j1939_frame,
-		 {"Frame", "j1939.frame", FT_STRING, BASE_NONE, NULL, 0x0, NULL,
-		  HFILL}},
-		{&hf_j1939_spn,
-		 {"Spn", "j1939.spn", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL}},
-		{&hf_j1939_dtc,
-		 {"Diagnosis Trouble Code", "j1939.dtc", FT_NONE, BASE_NONE, NULL, 0x0,
-		  NULL, HFILL}},
-		{&hf_j1939_oc,
-		 {"Ocurrence Count", "j1939.oc", FT_UINT8, BASE_DEC, NULL, 0x0, NULL,
-		  HFILL}},
-		{&hf_j1939_fmi,
-		 {"Failure Mode Identifier", "j1939.fmi", FT_UINT8, BASE_DEC, NULL, 0x0,
-		  NULL, HFILL}},
-		{&hf_j1939_blockId,
-		 {"Block ID", "j1939.fms1.blockId", FT_UINT8, BASE_DEC, NULL, 0x0F,
-		  NULL, HFILL}},
-		{&hf_bam_fragment_overlap,
-		 {"Fragment overlap", "bam.fragment.overlap", FT_BOOLEAN, BASE_NONE,
-		  NULL, 0x0, "Fragment overlaps with other fragments", HFILL}},
-
-		{&hf_bam_fragment_overlap_conflict,
-		 {"Conflicting data in fragment overlap",
-		  "bam.fragment.overlap.conflict", FT_BOOLEAN, BASE_NONE, NULL, 0x0,
-		  "Overlapping fragments contained conflicting data", HFILL}},
-
-		{&hf_bam_fragment_multiple_tails,
-		 {"Multiple tail fragments found", "bam.fragment.multipletails",
-		  FT_BOOLEAN, BASE_NONE, NULL, 0x0,
-		  "Several tails were found when defragmenting the packet", HFILL}},
-
-		{&hf_bam_fragment_too_long_fragment,
-		 {"Fragment too long", "bam.fragment.toolongfragment", FT_BOOLEAN,
-		  BASE_NONE, NULL, 0x0, "Fragment contained data past end of packet",
-		  HFILL}},
-
-		{&hf_bam_fragment_error,
-		 {"Defragmentation error", "bam.fragment.error", FT_FRAMENUM, BASE_NONE,
-		  NULL, 0x0, "Defragmentation error due to illegal fragments", HFILL}},
-
-		{&hf_bam_fragment_count,
-		 {"Fragment count", "bam.fragment.count", FT_UINT32, BASE_DEC, NULL,
-		  0x0, NULL, HFILL}},
-
-		{&hf_bam_fragment,
-		 {"BAM Fragment", "bam.fragment", FT_FRAMENUM, BASE_NONE, NULL, 0x0,
-		  NULL, HFILL}},
-
-		{&hf_bam_fragments,
-		 {"BAM Fragments", "bam.fragments", FT_BYTES, BASE_NONE, NULL, 0x0,
-		  NULL, HFILL}},
-
-		{&hf_bam_reassembled_in,
-		 {"Reassembled BAM in frame", "bam.reassembled_in", FT_FRAMENUM,
-		  BASE_NONE, NULL, 0x0, "This BAM packet is reassembled in this frame",
-		  HFILL}},
-
-		{&hf_bam_reassembled_length,
-		 {"Reassembled BAM length", "bam.reassembled.length", FT_UINT32,
-		  BASE_DEC, NULL, 0x0, "The total length of the reassembled payload",
-		  HFILL}},
-		{&hf_bam_reassembled_data,
-		 {"Reassembled BAM data", "bam.reassembled.data", FT_BYTES, BASE_NONE,
-		  NULL, 0x0, "The reassembled payload", HFILL}},
+		{ &hf_j1939_frame,
+			{"Frame", "j1939.frame",
+			FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL}
+		},
+		{ &hf_j1939_spn,
+			{"Spn", "j1939.spn",
+			FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL}
+		},
+		{ &hf_j1939_dtc,
+			{"Diagnosis Trouble Code", "j1939.dtc",
+			FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}
+		},
+		{ &hf_j1939_oc,
+			{"Ocurrence Count", "j1939.oc",
+			FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}
+		},
+		{ &hf_j1939_fmi,
+			{"Failure Mode Identifier", "j1939.fmi",
+			FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}
+		},
+		{ &hf_j1939_blockId,
+			{"Block ID", "j1939.fms1.blockId",
+			FT_UINT8, BASE_DEC, NULL, 0x0F, NULL, HFILL}
+		}
 	};
 
-	static gint *ett[] = {&ett_j1939,		 &ett_j1939_can,
-						  &ett_j1939_dtc,	&ett_j1939_message,
-						  &ett_bam_fragment, &ett_bam_fragments};
-
-	reassembly_table_register(&bam_reassembly_table,
-							  &addresses_reassembly_table_functions);
+	static gint *ett[] = {&ett_j1939, &ett_j1939_can,
+						&ett_j1939_dtc,	&ett_j1939_message};
 
 	proto_j1939 = proto_register_protocol("J1939 Framework",
 										  "j1939framework", "j1939framework");
@@ -267,7 +185,13 @@ void proto_register_j1939(void)
 	proto_register_field_array(proto_j1939, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
 
-    j1939_address_type = address_type_dissector_register("AT_J1939", "J1939 Address", J1939_addr_to_str, J1939_addr_str_len, NULL, J1939_col_filter_str, J1939_addr_len, NULL, NULL);
+	j1939_address_type = address_type_dissector_register("AT_J1939",
+			"J1939 Address",
+			J1939_addr_to_str,
+			J1939_addr_str_len,
+			NULL,
+			J1939_col_filter_str,
+			J1939_addr_len, NULL, NULL);
 }
 
 static void spn_header_info()
