@@ -37,13 +37,6 @@ using namespace J1939;
 
 static int dissect_J1939(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 				  void *data);
-void dissect_generic_frame(tvbuff_t *tvb, proto_tree *j1939_tree,
-						   proto_item *ti, GenericFrame *genFrame);
-void dissect_fms1_frame(tvbuff_t *tvb, proto_tree *j1939_tree, proto_item *ti,
-						const FMS1Frame *fms1Frame);
-void dissect_dm1_frame(tvbuff_t *tvb, proto_tree *j1939_tree, proto_item *ti,
-					   const DM1 *dm1Frame);
-
 static int hf_j1939_can_id = -1;
 static int hf_j1939_priority = -1;
 static int hf_j1939_pgn = -1;
@@ -194,7 +187,7 @@ void proto_register_j1939(void)
 			J1939_addr_len, NULL, NULL);
 }
 
-static void spn_header_info()
+static void register_spn_header()
 {
 	std::unique_ptr<J1939Frame> frame;
 	header_field_info* info;
@@ -255,7 +248,7 @@ void proto_reg_handoff_j1939(void)
 		return;
 	}
 
-	spn_header_info();
+	register_spn_header();
 }
 
 static unique_ptr<J1939Frame>
@@ -342,6 +335,53 @@ static void show_addr(tvbuff_t *tvb, packet_info *pinfo,
     set_address(&pinfo->dst, j1939_address_type, 1, (const void*)dest_addr);
 }
 
+void dissect_generic_frame(tvbuff_t *tvb, proto_tree *j1939_tree,
+						   proto_item *ti, GenericFrame *genFrame)
+{
+	proto_tree *spn_tree;
+	std::set<guint32> spnNumbers = genFrame->getSPNNumbers();
+
+	for (auto iter = spnNumbers.begin(); iter != spnNumbers.end(); ++iter) {
+		const SPN *spn = genFrame->getSPN(*iter);
+
+		ti = proto_tree_add_uint(j1939_tree, hf_j1939_spn, tvb,
+								 spn->getOffset(), spn->getByteSize(), *iter);
+		spn_tree = proto_item_add_subtree(ti, ett_j1939_can);
+
+		switch (spn->getType()) {
+		case SPN::SPN_NUMERIC: {
+			const SPNNumeric *spnNum = (SPNNumeric *)(spn);
+
+			ti = proto_tree_add_double_format(
+					spn_tree, hf_spn_id[*iter], tvb, spn->getOffset(),
+					spnNum->getByteSize(), spnNum->getFormattedValue(),
+					"%s: %.10g %s", spn->getName().c_str(),
+					spnNum->getFormattedValue(), spnNum->getUnits().c_str());
+		} break;
+		case SPN::SPN_STATUS: {
+			const SPNStatus *spnStatus = (SPNStatus *)(spn);
+
+			ti = proto_tree_add_uint_bits_format_value(
+					spn_tree, hf_spn_id[*iter], tvb,
+					(spn->getOffset() << 3) + 8 - spnStatus->getBitOffset() -
+					spnStatus->getBitSize(),
+					spnStatus->getBitSize(), spnStatus->getValue(), "%s (%u)",
+					spnStatus->getValueDescription(spnStatus->getValue()).c_str(),
+					spnStatus->getValue());
+		} break;
+		case SPN::SPN_STRING: {
+			const SPNString *spnStr = (SPNString *)(spn);
+
+			ti = proto_tree_add_item(spn_tree, hf_spn_id[*iter], tvb,
+									 spn->getOffset(),
+									 spnStr->getValue().size(), ENC_NA);
+		} break;
+		default:
+			break;
+		}
+	}
+}
+
 static void dissect_J1939_framework(tvbuff_t *tvb, packet_info *pinfo, proto_tree **j1939_tree, u32 id)
 {
 	proto_item *ti;
@@ -399,51 +439,4 @@ static int dissect_J1939(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 	dissect_J1939_framework(tvb, pinfo, &j1939_tree, can_info.id);
 
 	return tvb_captured_length(tvb);
-}
-
-void dissect_generic_frame(tvbuff_t *tvb, proto_tree *j1939_tree,
-						   proto_item *ti, GenericFrame *genFrame)
-{
-	proto_tree *spn_tree;
-	std::set<guint32> spnNumbers = genFrame->getSPNNumbers();
-
-	for (auto iter = spnNumbers.begin(); iter != spnNumbers.end(); ++iter) {
-		const SPN *spn = genFrame->getSPN(*iter);
-
-		ti = proto_tree_add_uint(j1939_tree, hf_j1939_spn, tvb,
-								 spn->getOffset(), spn->getByteSize(), *iter);
-		spn_tree = proto_item_add_subtree(ti, ett_j1939_can);
-
-		switch (spn->getType()) {
-		case SPN::SPN_NUMERIC: {
-			const SPNNumeric *spnNum = (SPNNumeric *)(spn);
-
-			ti = proto_tree_add_double_format(
-					spn_tree, hf_spn_id[*iter], tvb, spn->getOffset(),
-					spnNum->getByteSize(), spnNum->getFormattedValue(),
-					"%s: %.10g %s", spn->getName().c_str(),
-					spnNum->getFormattedValue(), spnNum->getUnits().c_str());
-		} break;
-		case SPN::SPN_STATUS: {
-			const SPNStatus *spnStatus = (SPNStatus *)(spn);
-
-			ti = proto_tree_add_uint_bits_format_value(
-					spn_tree, hf_spn_id[*iter], tvb,
-					(spn->getOffset() << 3) + 8 - spnStatus->getBitOffset() -
-					spnStatus->getBitSize(),
-					spnStatus->getBitSize(), spnStatus->getValue(), "%s (%u)",
-					spnStatus->getValueDescription(spnStatus->getValue()).c_str(),
-					spnStatus->getValue());
-		} break;
-		case SPN::SPN_STRING: {
-			const SPNString *spnStr = (SPNString *)(spn);
-
-			ti = proto_tree_add_item(spn_tree, hf_spn_id[*iter], tvb,
-									 spn->getOffset(),
-									 spnStr->getValue().size(), ENC_NA);
-		} break;
-		default:
-			break;
-		}
-	}
 }
