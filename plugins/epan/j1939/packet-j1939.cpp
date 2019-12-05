@@ -382,25 +382,32 @@ void dissect_generic_frame(tvbuff_t *tvb, proto_tree *j1939_tree,
 	}
 }
 
-static void dissect_J1939_framework(tvbuff_t *tvb, packet_info *pinfo, proto_tree **j1939_tree, u32 id)
+static void dissect_J1939_framework(tvbuff_t *tvb, packet_info *pinfo,
+		proto_tree **j1939_tree, const u32 id)
 {
 	proto_item *ti;
 	proto_tree *frame_tree;
 	guint32 data_length = tvb_reported_length(tvb);
 	guint8* content = (guint8 *) wmem_alloc(pinfo->pool, data_length);
+	guint32 pgn;
+
+	/* show PGN, even if we can't decode it */
+	pgn = (id & 0x3FFFF00) >> 8;
+
+	/* If PF < 240, PS is destination address, last byte of PGN is cleared */
+	if (((id & 0xFF0000) >> 16) < 240)
+		pgn &= 0x3FF00;
+	col_add_fstr(pinfo->cinfo, COL_INFO, "PGN: %d ", pgn);
 
 	tvb_memcpy(tvb, content, 0, data_length);
-
 	unique_ptr<J1939Frame> frame = j1939_decode(id, content, data_length);
 	if (frame == nullptr) {
-		col_add_fstr(pinfo->cinfo, COL_INFO, "Unknown");
+		col_append_fstr(pinfo->cinfo, COL_INFO, "Unknown");
 		return;
 	}
 
-	/* sets up info field */
 	const char *frameName = frame->getName().c_str();
-	col_add_fstr(pinfo->cinfo, COL_INFO, "PGN: %d", frame->getPGN());
-	col_append_fstr(pinfo->cinfo, COL_INFO, " Frame: %s", frameName);
+	col_append_fstr(pinfo->cinfo, COL_INFO, "Frame: %s", frameName);
 
 	ti = proto_tree_add_string(*j1939_tree, hf_j1939_frame, tvb, 0, tvb_reported_length(tvb), frameName);
 	frame_tree = proto_item_add_subtree(ti, ett_j1939_message);
