@@ -261,7 +261,7 @@ j1939_decode(u32 id, const guint8 *content, u32 len)
 
 		if (!frame) {
 			u32 pgn = ((id >> J1939_PGN_OFFSET) & J1939_PGN_MASK);
-			cerr << "Frame " << id << "(PGN:" << pgn << ")" <<
+			cerr << __func__ << ": Frame " << id << "(PGN:" << pgn << ")" <<
 				" not identified" << endl;
 			return nullptr;
 		}
