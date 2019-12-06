@@ -329,6 +329,9 @@ static void show_addr(tvbuff_t *tvb, packet_info *pinfo,
         proto_item_set_generated(ti);
     }
 
+	ti = proto_tree_add_uint(can_tree, hf_j1939_pgn, tvb, 0, 0, pgn);
+	proto_item_set_generated(ti);
+
     /* Fill in "destination" address even if its "broadcast" */
     dest_addr = (guint8*)wmem_alloc(pinfo->pool, 1);
     *dest_addr = (guint8)((id & 0xFF00) >> 8);
