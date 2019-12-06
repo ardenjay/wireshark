@@ -266,7 +266,7 @@ j1939_decode(u32 id, const guint8 *content, u32 len)
 			return nullptr;
 		}
 	} catch (J1939DecodeException &e) {
-		cerr << "Error decoding frame: " << e.getMessage() << endl;
+		cerr << __func__ << "Error decoding frame: " << e.getMessage() << endl;
 		return nullptr;
 	}
 	return frame;
